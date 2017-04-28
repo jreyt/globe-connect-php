@@ -3,7 +3,6 @@ namespace Globe\Connect;
 
 use Globe\Core\Base;
 use Globe\Core\Curl;
-
 /*
 * SMS API
 *
@@ -12,6 +11,7 @@ use Globe\Core\Curl;
 * @author   Clark Galgo <cgalgo@openovate.com>
 */
 class Sms extends Base {
+    const SEND_URL_PASSPHRASE = 'https://devapi.globelabs.com.ph/smsmessaging/v1/outbound/%s/requests';
     const SEND_URL = 'https://devapi.globelabs.com.ph/smsmessaging/v1/outbound/%s/requests?access_token=%s';
     const BINARY_URL = 'https://devapi.globelabs.com.ph/binarymessaging/v1/outbound/%s/requests?access_token=%s';
     
@@ -24,9 +24,11 @@ class Sms extends Base {
     * @param    string  sender  shortcode
     * @param    string  token   access token
     */
-    public function __construct($sender, $token) {
+    public function __construct($sender,$app_id,$app_secret,$passphrase) {
         $this->params['sender'] = $sender;
-        $this->params['token'] = $token;
+        $this->params['app_id'] = $app_id;
+        $this->params['app_secret'] = $app_secret;
+        $this->params['passphrase'] = $passphrase;
     }
     
     /*
@@ -36,9 +38,12 @@ class Sms extends Base {
     */
     public function sendMessage() {
         // prepare request url
-        $url = sprintf(self::SEND_URL, $this->params['sender'], $this->params['token']);
-        
-        // loop sms required fields
+        if (isset($this->params['token'])) {
+            $url = sprintf(self::SEND_URL, $this->params['sender'],$this->params['token']);
+        }else{
+            $url = sprintf(self::SEND_URL_PASSPHRASE, $this->params['sender']);
+        }
+        //loop sms required fields
         foreach($this->smsRequired as $v) {
             // check if required fields are set
             if(!isset($this->params[$v])) {
@@ -46,13 +51,22 @@ class Sms extends Base {
                 throw new \Exception('`'. $v .'` is required.');
             }
         }
-        
-        // prepare request payload
-        $payload = array('outboundSMSMessageRequest' => array(
-            'senderAddress' => 'tel:' . $this->params['sender'],
+        if (isset($this->params['token']) && $this->params['token'] <> ' ') {
+            $payload = array('outboundSMSMessageRequest' => array(
+            'senderAddress' => $this->params['sender'],
             'outboundSMSTextMessage'    => array(
                 'message'   => $this->params['message']),
-            'address'       => 'tel:' . $this->params['receiver_address']));
+            'address'       => $this->params['receiver_address']));
+        }else{
+            // prepare request payload
+        $payload = array(
+            'app_id' => $this->params['app_id'],
+            'app_secret' => $this->params['app_secret'],
+            'message'   => $this->params['message'],
+            'address'       => $this->params['receiver_address'],
+            'passphrase' => $this->params['passphrase']
+        );
+        }
         
         // if client correlator is set
         if(isset($this->params['client_correlator'])) {
@@ -62,8 +76,9 @@ class Sms extends Base {
         
         // payload must be json
         $payload = json_encode($payload);
-        
+        // return $payload;
         // intialize custom curl
+        // Log::info($payload);
         $curl = new Curl();
         // set request header as json
         $curl->setHeader(array('Content-type: application/json'));
